@@ -1,0 +1,198 @@
+buildscript {
+    repositories {
+        mavenCentral()
+        maven {
+            name "central snapshots"
+            url "https://oss.sonatype.org/content/repositories/snapshots/"
+        }
+        maven {
+            name "techshroom"
+            url "http://techshroom.github.io/downloads/maven"
+        }
+        maven {
+            name "gradle plugins"
+            url "https://plugins.gradle.org/m2/"
+        }
+        maven {
+            name = "forge"
+            url = "http://files.minecraftforge.net/maven"
+        }
+        jcenter()
+    }
+
+    dependencies {
+        classpath 'net.minecraftforge.gradle:ForgeGradle:2.1-SNAPSHOT'
+        classpath 'gradle.plugin.nl.javadude.gradle.plugins:license-gradle-plugin:0.12.0'
+        classpath 'org.jsoup:jsoup:1.8.3'
+        classpath group: 'com.techshroom', name: 'Aversion', version: '1.0.1-SNAPSHOT'
+    }
+}
+allprojects {
+    configurations.all {
+       resolutionStrategy {
+         // fail eagerly on version conflict (includes transitive dependencies)
+         // e.g. multiple different versions of the same dependency (group and name are equal)
+         // failOnVersionConflict()
+
+         // force certain versions of dependencies (including transitive)
+         force 'org.apache.logging.log4j:log4j-api:2.0-beta9',
+               'org.apache.logging.log4j:log4j-core:2.0-beta9'
+
+         cacheDynamicVersionsFor 10, 'minutes'
+         // don't cache changing modules at all
+         cacheChangingModulesFor 0, 'seconds'
+       }
+    }
+
+    apply plugin: 'aversion-apt'
+    apply plugin: 'aversion-maven'
+    apply plugin: 'aversion-util'
+    apply plugin: 'idea'
+
+    util {
+        javaVersion = '1.8'
+    }
+
+    repositories {
+        mavenCentral()
+        maven {
+            name "central snapshots"
+            url "https://oss.sonatype.org/content/repositories/snapshots/"
+        }
+        maven {
+            name "sponge"
+            url "https://repo.spongepowered.org/maven/"
+        }
+    }
+
+    ext.spongeApiVersion = '3.1.0'
+    ext.mcVersion = '1.8.9'
+    ext.forgeVersionPart = '1722'
+    ext.forgeVersion = '11.15.1.' + project.forgeVersionPart
+    ext.spongeForgePhase = 'BETA'
+    dependencies {
+        compile group: 'org.spongepowered', name: 'spongeapi', version: project.spongeApiVersion + '-SNAPSHOT'
+        compile group: 'org.apache.logging.log4j', name: 'log4j-core', version: '2.0.2'
+        compile group: 'org.apache.logging.log4j', name: 'log4j-api', version: '2.0.2'
+        compile group: 'net.sf.jopt-simple', name: 'jopt-simple', version: '4.7'
+        compile group: 'com.google.code.gson', name: 'gson', version: '2.3'
+        compile group: 'com.google.code.findbugs', name: 'jsr305', version: '3.0.1'
+        compile group: 'com.flowpowered', name: 'flow-math', version: '1.0.1'
+        compile group: 'org.jooq', name: 'jooq', version: '3.7.2'
+        addAPTReqWComp group: 'com.google.guava', name: 'guava', version: '18.0'
+        addAPT group: 'com.google.auto.factory', name: 'auto-factory', version: '1.0-SNAPSHOT'
+        addAPT group: 'com.google.auto.service', name: 'auto-service', version: '1.0-SNAPSHOT'
+        addAPT group: 'com.google.auto.value', name: 'auto-value', version: '1.2-SNAPSHOT'
+        addAPTReq name: 'aopalliance'
+        addAPTReq name: 'asm'
+        addAPTReq name: 'auto-value'
+        addAPTReq name: 'auto-common'
+        addAPTReq name: 'cglib'
+        addAPTReq name: 'commons-collections'
+        addAPTReq name: 'commons-lang'
+        addAPTReq name: 'dagger'
+        addAPTReq name: 'javawriter'
+        addAPTReq name: 'javax.inject'
+        addAPTReq name: 'velocity'
+
+        testCompile group: 'junit', name: 'junit', version: '4.+'
+    }
+}
+idea.project.languageLevel = util.javaVersion
+
+apply plugin: 'com.github.hierynomus.license'
+
+defaultTasks 'clean', 'licenseFormat', 'build'
+
+configure([compileJava, compileTestJava]) {
+    options.compilerArgs += ['-Xlint:all', '-Xlint:-path']
+    options.deprecation = true
+    options.encoding = 'UTF-8'
+    options.incremental = true
+    options.fork = true
+}
+
+license {
+    ext {
+        name = project.name
+        organization = project.organization
+        url = project.url
+    }
+    header = rootProject.file('HEADER.txt')
+    ignoreFailures = false
+    strictCheck = true
+    include '**/*.java'
+    exclude '**/RandomObjectPopulator.java'
+    mapping {
+        java = 'SLASHSTAR_STYLE'
+    }
+}
+
+import org.apache.tools.ant.filters.ReplaceTokens
+
+task detokenizeSource(type: Copy) {
+    from 'src/main/java'
+    into 'build/detokenizedSource'
+    inputs.property 'version', project.version.toString()
+    filter(ReplaceTokens, tokens: [
+        'ID': project.id.toString(),
+        'NAME': project.name.toString(),
+        'VERSION': project.version.toString()
+    ])
+}
+
+compileJava.dependsOn(detokenizeSource)
+compileJava.source = fileTree(dir: 'build/detokenizedSource')
+
+import org.jsoup.Jsoup;
+def lookupSpongeLatest() {
+    def discoveredVersion = '1112'
+    def doc = Jsoup.connect('http://files.minecraftforge.net/spongepowered').get();
+    def ele = doc.select('div.downloads div.download div.title i.promo-LATEST ~ small');
+    def data = ele.toString();
+    def match = data =~ ~"${project.spongeApiVersion}-${project.spongeForgePhase}-(\\d+)"
+    if (!match) {
+        println "Did not find a match for ${data}"
+        return ""
+    }
+    discoveredVersion = match.group(1)
+    return "${project.mcVersion}-${project.forgeVersionPart}-${project.spongeApiVersion}-${project.spongeForgePhase}-${discoveredVersion}"
+}
+
+project(':RunPlanetesimals') {
+    build.onlyIf { false }
+    // Special config to setup a run project
+    configurations.all {
+        resolutionStrategy.eachDependency { DependencyResolveDetails details ->
+            if (details.requested.name == 'spongeforge') {
+                if (details.requested.version == 'latest') {
+                    try {
+                        def ver = lookupSpongeLatest()
+                        details.useVersion ver
+                    } catch (Exception e) {
+                        println e.getMessage()
+                        throw e;
+                    }
+                }
+            }
+        }
+    }
+    apply plugin: 'net.minecraftforge.gradle.forge'
+    minecraft {
+        version project.mcVersion + '-' + project.forgeVersion
+        mappings 'snapshot_20160109'
+        runDir 'run'
+        makeObfSourceJar = false
+    }
+    repositories {
+        maven {
+            name "forge"
+            url "http://files.minecraftforge.net/maven/"
+        }
+    }
+    dependencies {
+        compile rootProject
+        compile group: 'org.spongepowered', name: 'spongeforge', version: 'latest', classifier: 'dev'
+    }
+    build.dependsOn = []
+}
