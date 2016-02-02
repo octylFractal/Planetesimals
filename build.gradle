@@ -23,6 +23,7 @@ buildscript {
     dependencies {
         classpath 'net.minecraftforge.gradle:ForgeGradle:2.1-SNAPSHOT'
         classpath 'gradle.plugin.nl.javadude.gradle.plugins:license-gradle-plugin:0.12.0'
+        classpath 'com.github.jengelman.gradle.plugins:shadow:1.2.2'
         classpath 'org.jsoup:jsoup:1.8.3'
         classpath group: 'com.techshroom', name: 'Aversion', version: '1.0.1-SNAPSHOT'
     }
@@ -58,6 +59,10 @@ allprojects {
         maven {
             name "central snapshots"
             url "https://oss.sonatype.org/content/repositories/snapshots/"
+        }
+        maven {
+            name "forge"
+            url "http://files.minecraftforge.net/maven/"
         }
         maven {
             name "sponge"
@@ -101,6 +106,14 @@ allprojects {
 idea.project.languageLevel = util.javaVersion
 
 apply plugin: 'com.github.hierynomus.license'
+apply plugin: 'com.github.johnrengelman.shadow'
+build.dependsOn(shadowJar)
+
+shadowJar {
+    dependencies {
+        include dependency('org.jooq:jooq')
+    }
+}
 
 defaultTasks 'clean', 'licenseFormat', 'build'
 
@@ -133,7 +146,6 @@ import org.apache.tools.ant.filters.ReplaceTokens
 task detokenizeSource(type: Copy) {
     from 'src/main/java'
     into 'build/detokenizedSource'
-    inputs.property 'version', project.version.toString()
     filter(ReplaceTokens, tokens: [
         'ID': project.id.toString(),
         'NAME': project.name.toString(),
@@ -146,7 +158,7 @@ compileJava.source = fileTree(dir: 'build/detokenizedSource')
 
 import org.jsoup.Jsoup;
 def lookupSpongeLatest() {
-    def discoveredVersion = '1112'
+    def discoveredVersion = '1127'
     def doc = Jsoup.connect('http://files.minecraftforge.net/spongepowered').get();
     def ele = doc.select('div.downloads div.download div.title i.promo-LATEST ~ small');
     def data = ele.toString();
@@ -156,7 +168,11 @@ def lookupSpongeLatest() {
         return ""
     }
     discoveredVersion = match.group(1)
-    return "${project.mcVersion}-${project.forgeVersionPart}-${project.spongeApiVersion}-${project.spongeForgePhase}-${discoveredVersion}"
+    return formatSpongeVersion(discoveredVersion)
+}
+
+def formatSpongeVersion(String ver) {
+    return "${project.mcVersion}-${project.forgeVersionPart}-${project.spongeApiVersion}-${project.spongeForgePhase}-${ver}"
 }
 
 project(':RunPlanetesimals') {
@@ -184,15 +200,22 @@ project(':RunPlanetesimals') {
         runDir 'run'
         makeObfSourceJar = false
     }
-    repositories {
-        maven {
-            name "forge"
-            url "http://files.minecraftforge.net/maven/"
+    if (System.getProperty('spongeDebugVersion') != null) {
+        repositories {
+            maven {
+                name 'sponge local'
+                url 'file:///Users/kenzietogami/Documents/_sponge'
+            }
         }
     }
     dependencies {
         compile rootProject
-        compile group: 'org.spongepowered', name: 'spongeforge', version: 'latest', classifier: 'dev'
+        compile group: 'org.spongepowered', 
+                name: 'spongeforge',
+                version: (System.getProperty('spongeDebugVersion') != null ? formatSpongeVersion(System.getProperty('spongeDebugVersion')) : 'latest'),
+                classifier: 'dev'
     }
+    makeEclipseCleanRunClient.onlyIf { false }
+    makeEclipseCleanRunServer.onlyIf { false }
     build.dependsOn = []
 }

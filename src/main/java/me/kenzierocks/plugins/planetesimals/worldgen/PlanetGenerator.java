@@ -31,9 +31,9 @@ import org.spongepowered.api.world.WorldCreationSettings;
 import org.spongepowered.api.world.biome.BiomeType;
 import org.spongepowered.api.world.gen.WorldGenerator;
 import org.spongepowered.api.world.gen.WorldGeneratorModifier;
-import org.spongepowered.common.world.gen.populators.RandomObjectPopulator;
 
 import me.kenzierocks.plugins.planetesimals.Planetesimals;
+import relocatedplanets.org.spongepowered.common.world.gen.populators.RandomObjectPopulator;
 
 public enum PlanetGenerator implements WorldGeneratorModifier {
 
